@@ -1,0 +1,29 @@
+--- a/src/tensorfold/families/deepseek_v41/cuda/engine.py
++++ b/src/tensorfold/families/deepseek_v41/cuda/engine.py
+@@ -101,7 +101,8 @@
+                           "with the text bias", flush=True)
+                 before = torch.cuda.memory_allocated()
+                 self.tower = Tower(self.vcfg, model_dir)
+-                self.vision = DsVision(self.vcfg, allow_urls=bool(vision_urls))
++                self.vision = DsVision(self.vcfg, allow_urls=bool(vision_urls),  # local: images a request may carry
++                                       max_images=int(os.environ.get("TF_DS_VISION_MAX_IMAGES") or 8))
+                 print(f"[tensorfold] vision tower on rank 0: {(torch.cuda.memory_allocated() - before) / 2**30:.2f} "
+                       f"GiB; VL bias for {found} gates", flush=True)
+         self.drafter = Drafter(self.model) if drafts > 0 and self.w.dspark is not None else None
+--- a/src/tensorfold/server/request_body.py
++++ b/src/tensorfold/server/request_body.py
+@@ -2,12 +2,13 @@
+ 
+ from __future__ import annotations
+ 
++import os
+ import re
+ from typing import Any
+ 
+ from tensorfold.server.errors import RequestError
+ 
+-LIMIT = 32 * 1024**2
++LIMIT = int(os.environ.get("TF_MAX_BODY_MIB") or 32) * 1024**2   # local: TF_MAX_BODY_MIB (64 images of photos)
+ _METADATA_LIMIT = 65536
+ 
+ 
