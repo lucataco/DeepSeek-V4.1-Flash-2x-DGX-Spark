@@ -70,3 +70,55 @@ the same accuracy; the two likely map `high` to different reasoning budgets.
 What this run can and cannot show: with 200 questions a single run moves by about ±3 points, so it rules out large
 regressions, not subtle ones. Both benchmarks are near saturation for this model. IFEval and a tool-calling benchmark
 would be the next, more sensitive tier. OpenRouter cost for both providers: $0.23.
+
+## Direct first-party API comparison (2026-10-18)
+
+The quality run above went through OpenRouter. This one calls DeepSeek's own API (`deepseek-flash`) directly, on the
+100-item [tinyBenchmarks](https://github.com/felipemaiapolo/tinyBenchmarks) subsets (`tinyGSM8K`, `tinyMMLU`), with the
+same prompt, `temperature: 0`, and matched `reasoning_effort`, scored per item.
+
+| effort | task | local | API | Δ | reasoning tokens/item (local / API) |
+|---|---|---:|---:|---:|---:|
+| high | GSM8K | 97.0% | 97.0% | 0.0 pt | 161 / 161 |
+| high | MMLU | 90.0% | 90.0% | 0.0 pt | 240 / 274 |
+| none | GSM8K | 98.0% | 97.0% | +1.0 pt | 0 / 0 |
+| none | MMLU | 88.0% | 88.0% | 0.0 pt | 0 / 0 |
+
+The discordant counts are the informative part, not the p-value: an exact McNemar test has almost no power at
+1–4 discordant answers, so p = 1.0 only says the sample is small.
+
+| effort | task | local correct, API wrong | API correct, local wrong | same answer |
+|---|---|---:|---:|---:|
+| high | GSM8K | 1 | 1 | 98/100 |
+| high | MMLU | 1 | 1 | 98/100 |
+| none | GSM8K | 1 | 0 | 99/100 |
+| none | MMLU | 4 | 4 | 92/100 |
+
+Per-task 95% Wilson intervals are ±3.2 points at 98/100, ±3.7 at 97/100, ±6.0 at 90/100 and ±6.4 at 88/100;
+that bounds the local-vs-API gap at a few points, not at zero. The API advertises `low`/`high`/`max` only; `none` is
+accepted but undocumented. These are raw accuracies on the 100 anchor items, not tinyBenchmarks' IRT estimate of full
+benchmark accuracy. Script: [`eval/api_compare.py`](../eval/api_compare.py); raw outputs and per-item pairing in
+[`eval/api-20261018/`](eval/api-20261018/).
+
+## 200K context
+
+Cold prompt of 199,963 tokens from a unique corpus (never tokenized, so no prefix-cache entry can match it),
+thinking off, 256 output tokens, one stream:
+
+| | cold | same prompt again |
+|---|---:|---:|
+| TTFT | 173.05 s | 3.44 s |
+| prefill | 165.50 s → **1,208 tok/s** | 2.80 s, 1,307 tokens refilled |
+| cached prompt tokens | 0 | 198,656 (97 × 2048 blocks) |
+| decode | **42.8 tok/s** | 42.8 tok/s |
+
+These are engine numbers from one run, not kit_bench: prefill is the server's `prefill_seconds_total` delta over
+199,963 tokens (165.50 s → 1,208 tok/s); measured from the client's time to first token it is 1,156 tok/s, the 7.5 s
+gap being request handling and the first token. Decode is the client-side window between the first and last streamed
+token, 42.8 tok/s over 256 tokens (~6 s), and the server's `decode_seconds_total` agrees at 41.9 tok/s. No
+short-context decode figure from the same script is recorded here, so no ratio to the rows above is claimed.
+
+An earlier attempt reported 198,656 of 199,963 prompt tokens as cached and 1.3 s of prefill. `/v1/tokenize` does not
+write into the KV window (43,149 tokens tokenized in 0.31 s, `prefill_seconds_total` unchanged), and a prompt that
+repeats one block six times reports `cached: 0`, so that hit is unexplained; the measurement above uses a corpus that
+had never been sent and reports `cached: 0`. Script: [`eval/longctx_200k.py`](../eval/longctx_200k.py).

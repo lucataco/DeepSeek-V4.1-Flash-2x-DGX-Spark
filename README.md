@@ -14,10 +14,18 @@ reproduce them. It contains no weights.
 | Decode, 4 streams, aggregate | 118 tok/s |
 | Decode after a 128K-token prompt | 71 tok/s |
 | Prefill (8K / 32K / 128K) | ~1,650–2,000 / ~1,300 / ~1,300 tok/s |
-| Quality vs DeepSeek's own API (seeded MMLU + GSM8K, thinking off and on) | same within noise; same answer on 96–98% of questions |
+| Quality vs DeepSeek's API via OpenRouter (seeded MMLU + GSM8K, thinking off and on) | same within noise; same answer on 96–98% of questions |
 
 Full numbers, versions and method: [results/RESULTS.md](results/RESULTS.md). How we got here, including what did not
 work: [docs/JOURNEY.md](docs/JOURNEY.md).
+
+Against DeepSeek's first-party API (`deepseek-flash`) on 100-item tinyBenchmarks subsets, at matched
+`reasoning_effort`: same marginal accuracy on GSM8K and MMLU; 98 of 100 answers identical with thinking on, and
+99 (GSM8K) / 92 (MMLU) with it off. With only 1–4 discordant answers per task that rules out large regressions, not subtle ones.
+Details: [results/RESULTS.md](results/RESULTS.md#direct-first-party-api-comparison-2026-10-18).
+
+200K context, measured separately from the rows above (256 output tokens, thinking off, one run, prompt never reused):
+engine prefill **1,208 tok/s** (165.5 s, 173 s to first token) and decode **42.8 tok/s**.
 
 ## What you need
 
